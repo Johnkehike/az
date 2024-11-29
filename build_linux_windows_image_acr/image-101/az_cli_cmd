@@ -1,0 +1,4 @@
+$ACR_RGNAME='acr-01-RG'
+$ACR_NAME=$(az acr list --resource-group $ACR_RGNAME --query "[].name" --output tsv)
+echo $ACR_NAME
+az acr build --registry $ACR_NAME --image hellofromnode:v1.0 .
