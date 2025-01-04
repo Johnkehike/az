@@ -1,0 +1,7 @@
+code vnet.json
+$rgName='az104-06-rg1-lb-public'                                                                                                                                
+$location='westus'                                                                                                                              
+az group create --name $rgName --location $location
+
+//git clone https://github.com/MicrosoftDocs/mslearn-improve-app-scalability-resiliency-with-load-balancer.git
+cd mslearn-improve-app-scalability-resiliency-with-load-balancer

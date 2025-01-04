@@ -1,0 +1,126 @@
+az group create --name $rgName --location $location
+
+az network vnet create --resource-group "[sandbox resource group name]" 
+--name SalesVNet --address-prefixes 10.1.0.0/16 --subnet-name Apps 
+--subnet-prefixes 10.1.1.0/24 --location northeurope
+
+az network vnet create --resource-group $rgName 
+--name MarketingVNet --address-prefixes 10.2.0.0/16 --subnet-name Apps 
+--subnet-prefixes 10.2.1.0/24 --location $location
+
+$rgName='az104-06-rg1-vnet-WE'
+$location='westeurope'
+
+az group create --name $rgName --location $location
+
+az network vnet create --resource-group $rgName 
+--name ResearchVNet --address-prefixes 10.3.0.0/16 --subnet-name Data 
+--subnet-prefixes 10.3.1.0/24 --location $location
+
+az network vnet list --query "[?contains(provisioningState, 'Succeeded')]" --output table
+
+
+
+//create vms in each vnet
+//SalesVNet
+$rgName='az104-06-rg1-vnet-NE'
+$location='northeurope'
+
+az vm create --resource-group $rgName 
+--no-wait --name SalesVM --location $location --vnet-name SalesVNet --subnet Apps 
+--image Ubuntu2204 --admin-username azureuser --admin-password newPassword@1
+
+//Marketingvnet
+az vm create --resource-group $rgName 
+--no-wait --name MarketingVM --location $location --vnet-name MarketingVNet --subnet Apps 
+--image Ubuntu2204 --admin-username azureuser --admin-password newPassword@1
+
+//ResearchVNet
+$rgName='az104-06-rg1-vnet-WE'
+$location='westeurope'
+
+az vm create --resource-group $rgName 
+--no-wait --name ResearchVM --location $location --vnet-name ResearchVMVNet --subnet Data 
+--image Ubuntu2204 --admin-username azureuser --admin-password newPassword@1
+
+//run theaz cli command
+watch -d -n 5 "az vm list \
+    --resource-group $rgName \
+    --show-details \
+    --query '[*].{Name:name, ProvisioningState:provisioningState, PowerState:powerState}' \
+    --output table"
+
+
+
+//Setup VNet peering using cli it has to be twice to include the other vnet
+// SalesVNet to MarketingVNet
+$rgName='az104-06-rg1-vnet-NE'
+$location='northeurope'
+
+az network vnet peering create 
+--name SalesVNet-To-MarketingVNet 
+--remote-vnet MarketingVNet --resource-group $rgName 
+--vnet-name SalesVNet --allow-vnet-access
+
+az network vnet peering create 
+--name MarketingVNet-To-SalesVNet 
+--remote-vnet SalesVNet --resource-group $rgName 
+--vnet-name MarketingVNet --allow-vnet-access
+
+// MarketingVNet to ResearchVNet
+$rgName='az104-06-rg1-vnet-NE'
+//cause the other vnet is in a different RG, get the below from the url of the vnet
+// /subscriptions/111daf06-52a4-4243-90e0-b94ceee28ffe/resourceGroups/az104-06-rg1-vnet-WE/providers/Microsoft.Network/virtualNetworks/ResearchVNet
+az network vnet peering create 
+--name MarketingVNet-To-ResearchVNet 
+--remote-vnet 
+/subscriptions/111daf06-52a4-4243-90e0-b94ceee28ffe/resourceGroups/az104-06-rg1-vnet-WE/providers/Microsoft.Network/virtualNetworks/ResearchVNet 
+--resource-group $rgName  
+--vnet-name MarketingVNet --allow-vnet-access
+
+
+// ResearchVNet to MarketingVNet
+$rgName='az104-06-rg1-vnet-WE'
+
+// /subscriptions/111daf06-52a4-4243-90e0-b94ceee28ffe/resourceGroups/az104-06-rg1-vnet-NE/providers/Microsoft.Network/virtualNetworks/MarketingVNet
+az network vnet peering create 
+--name ResearchVNet-To-MarketingVNet 
+--remote-vnet 
+/subscriptions/111daf06-52a4-4243-90e0-b94ceee28ffe/resourceGroups/az104-06-rg1-vnet-NE/providers/Microsoft.Network/virtualNetworks/MarketingVNet 
+--resource-group $rgName 
+--vnet-name ResearchVNet --allow-vnet-access
+
+//check connection between vnets ResearchVNet abd MarketingVNet
+
+$rgName='az104-06-rg1-vnet-WE'
+
+az network vnet peering list 
+--resource-group $rgName 
+--vnet-name ResearchVNet 
+--query "[].{Name:name, Resource:resourceGroup, PeeringState:peeringState, AllowVnetAccess:allowVirtualNetworkAccess}" 
+--output table
+
+$rgName='az104-06-rg1-vnet-NE'
+
+az network vnet peering list 
+--resource-group $rgName 
+--vnet-name MarketingVNet 
+--query "[].{Name:name, Resource:resourceGroup, PeeringState:peeringState, AllowVnetAccess:allowVirtualNetworkAccess}" 
+--output table
+
+
+//test ssh connection from vms
+az vm list 
+--resource-group $rgName 
+--query "[*].{Name:name, PrivateIP:privateIps, PublicIP:publicIps}" 
+--show-details --output table
+
+// marketingVM  52.178.145.234
+//salesvm 52.164.246.253
+//researchvm 172.201.4.56
+ssh -o StrictHostKeyChecking=no azureuser@52.164.246.253
+
+//from sales try marketing
+ssh -o StrictHostKeyChecking=no azureuser@52.178.145.234
+//from marketing try connecting to research
+ssh -o StrictHostKeyChecking=no azureuser@172.201.4.56
